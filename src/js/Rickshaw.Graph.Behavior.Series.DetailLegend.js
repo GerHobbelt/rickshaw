@@ -25,9 +25,11 @@ Rickshaw.Graph.Behavior.Series.DetailLegend = function(args) {
       if (line.series.detail === detail) {
         line.series.enable();
         line.element.classList.remove('hidden');
+        line.element.classList.remove('disabled');
       } else {
         line.series.disable();
         line.element.classList.add('hidden');
+        line.element.classList.add('disabled');
       }
     });
   };
