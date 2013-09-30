@@ -22,15 +22,19 @@ Rickshaw.Graph.Behavior.Series.DetailLegend = function(args) {
 
   this.enableLinesForDetail = function(detail) {
     self.legend.lines.forEach(function(line) {
-      if (line.series.detail === detail) {
-        line.series.enable();
-        line.element.classList.remove('hidden');
-        line.element.classList.remove('disabled');
-      } else {
-        line.series.disable();
-        line.element.classList.add('hidden');
-        line.element.classList.add('disabled');
-      }
+      if (line.series.detail !== detail) { return; }
+
+      line.series.enable();
+      line.element.classList.remove('hidden');
+      line.element.classList.remove('disabled');
+    });
+
+    self.legend.lines.forEach(function(line) {
+      if (line.series.detail === detail) { return; }
+
+      line.series.disable();
+      line.element.classList.add('hidden');
+      line.element.classList.add('disabled');
     });
   };
 
