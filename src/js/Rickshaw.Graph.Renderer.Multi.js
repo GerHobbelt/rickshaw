@@ -7,12 +7,6 @@ Rickshaw.Graph.Renderer.Multi = Rickshaw.Class.create( Rickshaw.Graph.Renderer, 
 	initialize: function($super, args) {
 
 		$super(args);
-
-		this.graph.series.forEach( function(series) {
-			if (!series.renderer) {
-				throw new Error("Each series needs a renderer for graph 'multi' renderer");
-			}
-		});
 	},
 
 	defaults: function($super) {
@@ -22,6 +16,13 @@ Rickshaw.Graph.Renderer.Multi = Rickshaw.Class.create( Rickshaw.Graph.Renderer, 
 			fill: false,
 			stroke: true 
 		} );
+	},
+
+	configure: function($super, args) {
+
+		args = args || {};
+		this.config = args;
+		$super(args);
 	},
 
 	domain: function($super) {
@@ -72,6 +73,13 @@ Rickshaw.Graph.Renderer.Multi = Rickshaw.Class.create( Rickshaw.Graph.Renderer, 
 
 				var renderer = graph._renderers[series.renderer];
 
+				var config = {};
+
+				var defaults = [ this.defaults(), renderer.defaults(), this.config, this.graph ];
+				defaults.forEach(function(d) { Rickshaw.extend(config, d) });
+
+				renderer.configure(config);
+
 				renderGroups[series.renderer] = {
 					renderer: renderer,
 					series: [],
@@ -121,6 +129,12 @@ Rickshaw.Graph.Renderer.Multi = Rickshaw.Class.create( Rickshaw.Graph.Renderer, 
 
 	render: function() {
 
+		this.graph.series.forEach( function(series) {
+			if (!series.renderer) {
+				throw new Error("Each series needs a renderer for graph 'multi' renderer");
+			}
+		});
+
 		this.graph.vis.selectAll('*').remove();
 
 		var groups = this._groups();
@@ -130,6 +144,8 @@ Rickshaw.Graph.Renderer.Multi = Rickshaw.Class.create( Rickshaw.Graph.Renderer, 
 
 			var series = group.series
 				.filter( function(series) { return !series.disabled } );
+
+			series.active = function() { return series };
 
 			group.renderer.render({ series: series, vis: group.vis });
 			series.forEach(function(s) { s.stack = s._stack || s.stack || s.data; });

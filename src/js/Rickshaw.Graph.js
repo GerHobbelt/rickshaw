@@ -2,59 +2,54 @@ Rickshaw.namespace('Rickshaw.Graph');
 
 Rickshaw.Graph = function(args) {
 
-	if (!args.element) throw "Rickshaw.Graph needs a reference to an element";
-
-	this.element = args.element;
-	this.series = args.series;
-
-	this.defaults = {
-		interpolation: 'cardinal',
-		offset: 'zero',
-		min: undefined,
-		max: undefined,
-		preserve: false
-	};
-
-	Rickshaw.keys(this.defaults).forEach( function(k) {
-		this[k] = args[k] || this.defaults[k];
-	}, this );
-
-	this.window = {};
-
-	this.updateCallbacks = [];
-
 	var self = this;
 
 	this.initialize = function(args) {
 
+		if (!args.element) throw "Rickshaw.Graph needs a reference to an element";
+		if (args.element.nodeType !== 1) throw "Rickshaw.Graph element was defined but not an HTML element";
+
+		this.element = args.element;
+		this.series = args.series;
+		this.window = {};
+
+		this.updateCallbacks = [];
+		this.configureCallbacks = [];
+
+		this.defaults = {
+			interpolation: 'cardinal',
+			offset: 'zero',
+			min: undefined,
+			max: undefined,
+			preserve: false,
+			xScale: undefined,
+			yScale: undefined
+		};
+
+		this._loadRenderers();
+		this.configure(args);
 		this.validateSeries(args.series);
 
 		this.series.active = function() { return self.series.filter( function(s) { return !s.disabled } ) };
-
 		this.setSize({ width: args.width, height: args.height });
-
 		this.element.classList.add('rickshaw_graph');
+
 		this.vis = d3.select(this.element)
 			.append("svg:svg")
 			.attr('width', this.width)
 			.attr('height', this.height);
 
-		var renderers = [
-			Rickshaw.Graph.Renderer.Stack,
-			Rickshaw.Graph.Renderer.Line,
-			Rickshaw.Graph.Renderer.Bar,
-			Rickshaw.Graph.Renderer.Area,
-			Rickshaw.Graph.Renderer.ScatterPlot,
-			Rickshaw.Graph.Renderer.Multi
-		];
-
-		renderers.forEach( function(r) {
-			if (!r) return;
-			self.registerRenderer(new r( { graph: self } ));
-		} );
-
-		this.setRenderer(args.renderer || 'stack', args);
 		this.discoverRange();
+	};
+
+	this._loadRenderers = function() {
+
+		for (var name in Rickshaw.Graph.Renderer) {
+			if (!name || !Rickshaw.Graph.Renderer.hasOwnProperty(name)) continue;
+			var r = Rickshaw.Graph.Renderer[name];
+			if (!r || !r.prototype || !r.prototype.render) continue;
+			self.registerRenderer(new r( { graph: self } ));
+		}
 	};
 
 	this.validateSeries = function(series) {
@@ -86,25 +81,32 @@ Rickshaw.Graph = function(args) {
 					(typeof x) + " and " + (typeof y);
 			}
 
+			if (s.data.length >= 3) {
+				// probe to sanity check sort order
+				if (s.data[2].x < s.data[1].x || s.data[1].x < s.data[0].x || s.data[s.data.length - 1].x < s.data[0].x) {
+					throw "series data needs to be sorted on x values for series name: " + s.name;
+				}
+			}
+
 		}, this );
 	};
 
 	this.dataDomain = function() {
 
-		// take from the first series
-		var data = this.series[0].data;
+		var data = this.series.map( function(s) { return s.data } );
 
-		return [ data[0].x, data.slice(-1).shift().x ];
+		var min = d3.min( data.map( function(d) { return d[0].x } ) );
+		var max = d3.max( data.map( function(d) { return d[d.length - 1].x } ) );
 
+		return [min, max];
 	};
 
 	this.discoverRange = function() {
 
 		var domain = this.renderer.domain();
 
-		this.x = d3.scale.linear().domain(domain.x).range([0, this.width]);
-
-		this.y = d3.scale.linear().domain(domain.y).range([this.height, 0]);
+		this.x = (this.xScale || d3.scale.linear()).domain(domain.x).range([0, this.width]);
+		this.y = (this.yScale || d3.scale.linear()).domain(domain.y).range([this.height, 0]);
 
 		this.y.magnitude = d3.scale.linear()
 			.domain([domain.y[0] - domain.y[0], domain.y[1] - domain.y[0]])
@@ -121,6 +123,7 @@ Rickshaw.Graph = function(args) {
 		this.updateCallbacks.forEach( function(callback) {
 			callback();
 		} );
+
 	};
 
 	this.update = this.render;
@@ -143,7 +146,7 @@ Rickshaw.Graph = function(args) {
 
 		data = preserve ? Rickshaw.clone(data) : data;
 
-		this.series.forEach( function(series, index) {
+		this.series.active().forEach( function(series, index) {
 			if (series.scale) {
 				// apply scale to each series
 				var seriesData = data[index];
@@ -172,10 +175,17 @@ Rickshaw.Graph = function(args) {
 
 		stackedData = stackedData || data;
 
+		if (this.renderer.unstack) {
+			stackedData.forEach( function(seriesData) {
+				seriesData.forEach( function(d) {
+					d.y0 = d.y0 === undefined ? 0 : d.y0;
+				} );
+			} );
+		}
+
 		this.stackData.hooks.after.forEach( function(entry) {
 			stackedData = entry.f.apply(self, [data]);
 		} );
-
 
 		var i = 0;
 		this.series.forEach( function(series) {
@@ -225,6 +235,10 @@ Rickshaw.Graph = function(args) {
 		this.updateCallbacks.push(callback);
 	};
 
+	this.onConfigure = function(callback) {
+		this.configureCallbacks.push(callback);
+	};
+
 	this.registerRenderer = function(renderer) {
 		this._renderers = this._renderers || {};
 		this._renderers[renderer.name] = renderer;
@@ -232,17 +246,28 @@ Rickshaw.Graph = function(args) {
 
 	this.configure = function(args) {
 
+		this.config = this.config || {};
+
 		if (args.width || args.height) {
 			this.setSize(args);
 		}
 
 		Rickshaw.keys(this.defaults).forEach( function(k) {
-			this[k] = k in args ? args[k]
+			this.config[k] = k in args ? args[k]
 				: k in this ? this[k]
 				: this.defaults[k];
 		}, this );
 
-		this.setRenderer(args.renderer || this.renderer.name, args);
+		Rickshaw.keys(this.config).forEach( function(k) {
+			this[k] = this.config[k];
+		}, this );
+
+		var renderer = args.renderer || (this.renderer && this.renderer.name) || 'stack';
+		this.setRenderer(renderer, args);
+
+		this.configureCallbacks.forEach( function(callback) {
+			callback(args);
+		} );
 	};
 
 	this.setRenderer = function(r, args) {
