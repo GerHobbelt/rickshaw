@@ -1698,6 +1698,58 @@ Rickshaw.Graph.Axis.Y.Scaled = Rickshaw.Class.create( Rickshaw.Graph.Axis.Y, {
     }
   }
 } );
+Rickshaw.namespace('Rickshaw.Graph.Behavior.Series.DetailLegend');
+
+Rickshaw.Graph.Behavior.Series.DetailLegend = function(args) {
+  var self = this;
+
+  this.graph         = args.graph;
+  this.legend        = args.legend;
+  this.elements      = args.elements;
+  this.defaultDetail = args.defaultDetail;
+
+  this.highlightDetail = function(detail) {
+    for (var j = 0; j < self.elements.length; ++j) {
+      var element = self.elements[j];
+
+      if (detail === element.getAttribute('data-detail')) {
+        element.classList.remove('disabled');
+      } else {
+        element.classList.add('disabled');
+      }
+    }
+  };
+
+  this.enableLinesForDetail = function(detail) {
+    self.legend.lines.forEach(function(line) {
+      if (line.series.detail !== detail) { return; }
+
+      line.series.enable();
+      line.element.classList.remove('hidden');
+      line.element.classList.remove('disabled');
+    });
+
+    self.legend.lines.forEach(function(line) {
+      if (line.series.detail === detail) { return; }
+
+      line.series.disable();
+      line.element.classList.add('hidden');
+      line.element.classList.add('disabled');
+    });
+  };
+
+  for (var i = 0; i < self.elements.length; ++i) {
+    self.elements[i].addEventListener('click', function(e) {
+      var detail = e.target.parentNode.getAttribute('data-detail');
+
+      self.highlightDetail(detail);
+      self.enableLinesForDetail(detail);
+    });
+  }
+
+  self.highlightDetail(self.defaultDetail);
+  self.enableLinesForDetail(self.defaultDetail);
+};
 Rickshaw.namespace('Rickshaw.Graph.Behavior.Series.Highlight');
 
 Rickshaw.Graph.Behavior.Series.Highlight = function(args) {
@@ -1945,6 +1997,28 @@ Rickshaw.Graph.Behavior.Series.Toggle = function(args) {
 
 	this.updateBehaviour = function () { this._addBehavior() };
 
+};
+Rickshaw.namespace('Rickshaw.Graph.Behavior.Series.VisibleLines');
+
+Rickshaw.Graph.Behavior.Series.VisibleLines = function(args) {
+
+  this.graph  = args.graph;
+  this.legend = args.legend;
+  this.lines  = args.lines;
+
+  var self = this;
+
+  if (this.legend && this.lines.length > 0) {
+    if (typeof $ != 'undefined') {
+
+      this.legend.lines.forEach( function(line) {
+        if (self.lines.indexOf(line.series.name) >= 0) { return; }
+
+        line.series.disable();
+        line.element.classList.add('disabled');
+      } );
+    }
+  }
 };
 Rickshaw.namespace('Rickshaw.Graph.HoverDetail');
 
@@ -2194,67 +2268,68 @@ Rickshaw.namespace('Rickshaw.Graph.Legend');
 
 Rickshaw.Graph.Legend = function(args) {
 
-	var element = this.element = args.element;
-	var graph = this.graph = args.graph;
+  var element = this.element = args.element;
+  var graph = this.graph = args.graph;
 
-	var self = this;
+  var self = this;
 
-	element.classList.add('rickshaw_legend');
+  element.classList.add('rickshaw_legend');
 
-	var list = this.list = document.createElement('ul');
-	element.appendChild(list);
+  var list = this.list = document.createElement('ul');
+  element.appendChild(list);
 
-	var series = graph.series
-		.map( function(s) { return s } );
+  var series = graph.series
+    .map( function(s) { return s } );
 
-	if (!args.naturalOrder) {
-		series = series.reverse();
-	}
+  if (!args.naturalOrder) {
+    series = series.reverse();
+  }
 
-	this.lines = [];
+  this.lines = [];
 
-	this.addLine = function (series) {
-		var line = document.createElement('li');
-		line.className = 'line';
-		if (series.disabled) {
-			line.className += ' disabled';
-		}
+  this.addLine = function (series) {
+    var line = document.createElement('li');
+    line.className = 'line';
+    line.setAttribute('data-detail', series.detail);
+    if (series.disabled) {
+      line.className += ' disabled';
+    }
 
-		var swatch = document.createElement('div');
-		swatch.className = 'swatch';
-		swatch.style.backgroundColor = series.color;
+    var swatch = document.createElement('div');
+    swatch.className = 'swatch';
+    swatch.style.backgroundColor = series.color;
 
-		line.appendChild(swatch);
+    line.appendChild(swatch);
 
-		var label = document.createElement('span');
-		label.className = 'label';
-		label.innerHTML = series.name;
+    var label = document.createElement('span');
+    label.className = 'label';
+    label.innerHTML = series.name;
 
-		line.appendChild(label);
-		list.appendChild(line);
+    line.appendChild(label);
+    list.appendChild(line);
 
-		line.series = series;
+    line.series = series;
 
-		if (series.noLegend) {
-			line.style.display = 'none';
-		}
+    if (series.noLegend) {
+      line.style.display = 'none';
+    }
 
-		var _line = { element: line, series: series };
-		if (self.shelving) {
-			self.shelving.addAnchor(_line);
-			self.shelving.updateBehaviour();
-		}
-		if (self.highlighter) {
-			self.highlighter.addHighlightEvents(_line);
-		}
-		self.lines.push(_line);
-	};
+    var _line = { element: line, series: series };
+    if (self.shelving) {
+      self.shelving.addAnchor(_line);
+      self.shelving.updateBehaviour();
+    }
+    if (self.highlighter) {
+      self.highlighter.addHighlightEvents(_line);
+    }
+    self.lines.push(_line);
+  };
 
-	series.forEach( function(s) {
-		self.addLine(s);
-	} );
+  series.forEach( function(s) {
+    self.addLine(s);
+  } );
 
-	graph.onUpdate( function() {} );
+  graph.onUpdate( function() {} );
 };
 Rickshaw.namespace('Rickshaw.Graph.RangeSlider');
 
